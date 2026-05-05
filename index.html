@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ормузский пролив — Live Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #f8f7f4;
+    --bg2: #eeecea;
+    --bg3: #fff;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --text: #1a1a18;
+    --text2: #5f5e5a;
+    --text3: #888780;
+    --radius: 10px;
+    --radius-sm: 7px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --bg2: #242422;
+      --bg3: #2c2c2a;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.2);
+      --text: #f0efe8;
+      --text2: #b4b2a9;
+      --text3: #888780;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+
+  /* HEADER */
+  .hdr { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-bottom: 14px; border-bottom: 0.5px solid var(--border); margin-bottom: 16px; }
+  .hdr-left h1 { font-size: 20px; font-weight: 600; }
+  .hdr-left p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .hdr-right { display: flex; align-items: center; gap: 8px; }
+  .live-pill { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); background: var(--bg2); padding: 5px 12px; border-radius: 20px; border: 0.5px solid var(--border); }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #E24B4A; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+  .btn { font-size: 13px; padding: 6px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text); cursor: pointer; transition: background 0.15s; }
+  .btn:hover { background: var(--bg2); }
+  .btn.primary { background: #378ADD; color: #fff; border-color: #378ADD; }
+  .btn.primary:hover { background: #2a6db5; }
+
+  /* API SETUP CARD */
+  .api-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; }
+  .api-card h2 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+  .api-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .api-row input { flex: 1; min-width: 200px; font-size: 13px; padding: 7px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); }
+  .api-hint { font-size: 12px; color: var(--text3); margin-top: 8px; }
+  .api-hint a { color: #378ADD; text-decoration: none; }
+  .status-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-sim { background: #FAEEDA; color: #633806; }
+  .badge-live { background: #EAF3DE; color: #27500A; }
+  .badge-err { background: #FCEBEB; color: #791F1F; }
+
+  /* ALERT */
+  .alert { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 12px; border: 1.5px solid; font-size: 13px; animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+  .alert.danger { background: #FCEBEB; border-color: #F09595; }
+  .alert.warning { background: #FAEEDA; border-color: #FAC775; }
+  .alert.success { background: #EAF3DE; border-color: #C0DD97; }
+  .alert-ico { font-size: 18px; flex-shrink: 0; }
+  .alert-body { flex: 1; }
+  .alert-title { font-weight: 600; }
+  .alert-sub { font-size: 12px; color: var(--text2); margin-top: 1px; }
+  .signal-pill { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 12px; white-space: nowrap; }
+  .alert.danger .signal-pill { background: #F7C1C1; color: #791F1F; }
+  .alert.warning .signal-pill { background: #FAC775; color: #633806; }
+  .alert.success .signal-pill { background: #C0DD97; color: #27500A; }
+
+  /* METRICS */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  @media(max-width:700px){ .metrics { grid-template-columns: repeat(2,1fr); } }
+  .metric { background: var(--bg2); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .metric-lbl { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+  .metric-val { font-size: 24px; font-weight: 600; line-height: 1; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+  .c-red { color: #A32D2D; }
+  .c-amber { color: #854F0B; }
+  .c-green { color: #3B6D11; }
+  .c-blue { color: #185FA5; }
+
+  /* THRESHOLD */
+  .thresh-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--bg2); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; }
+  .thresh-bar label { font-size: 12px; color: var(--text2); white-space: nowrap; }
+  .thresh-bar input[type=range] { flex: 1; min-width: 120px; accent-color: #378ADD; }
+  .thresh-bar span { font-size: 12px; font-weight: 500; white-space: nowrap; min-width: 200px; }
+
+  /* MAP + SIDE */
+  .main-grid { display: grid; grid-template-columns: 1fr 300px; gap: 12px; margin-bottom: 14px; }
+  @media(max-width:800px){ .main-grid { grid-template-columns: 1fr; } }
+  .map-card { background: #071525; border-radius: var(--radius); overflow: hidden; position: relative; border: 0.5px solid var(--border); }
+  .map-card svg { display: block; width: 100%; }
+  .vtip { position: absolute; background: rgba(5,15,30,0.94); color: #daeaf8; border-radius: 6px; padding: 7px 11px; font-size: 11px; pointer-events: none; display: none; white-space: nowrap; z-index: 20; border: 0.5px solid rgba(100,180,255,0.25); line-height: 1.6; }
+
+  .side { display: flex; flex-direction: column; gap: 10px; }
+  .panel { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .panel h3 { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .sig-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 0.5px solid var(--border); }
+  .sig-row:last-child { border: none; }
+  .sig-name { font-size: 12px; color: var(--text); }
+  .sig-val { font-size: 12px; font-weight: 600; }
+  .up { color: #A32D2D; }
+  .dn { color: #3B6D11; }
+  .nx { color: var(--text3); }
+
+  .ais-log { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+  .log-entry { font-size: 11px; padding: 4px 8px; border-radius: 5px; border-left: 2px solid var(--border2); background: var(--bg2); color: var(--text2); }
+  .log-entry.new { border-left-color: #378ADD; color: var(--text); }
+  .log-entry.warn { border-left-color: #E24B4A; }
+
+  /* CHARTS */
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  @media(max-width:600px){ .charts { grid-template-columns: 1fr; } }
+  .chart-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .chart-card h3 { font-size: 12px; font-weight: 500; color: var(--text2); margin-bottom: 8px; }
+
+  .footer { text-align: center; font-size: 11px; color: var(--text3); padding-top: 8px; }
+  .footer a { color: #378ADD; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <h1>🛢 Ормузский пролив — Live Monitor</h1>
+      <p>AIS трафик · Нефть Brent · Торговые алерты · обновляется каждые 30 сек</p>
+    </div>
+    <div class="hdr-right">
+      <div class="live-pill"><div class="live-dot"></div><span id="live-label">симуляция</span></div>
+    </div>
+  </div>
+
+  <!-- API SETUP -->
+  <div class="api-card" id="api-card">
+    <h2>🔑 Подключение к реальным AIS данным <span class="status-badge badge-sim" id="conn-badge">Симуляция</span></h2>
+    <div class="api-row">
+      <input type="text" id="api-key" placeholder="Вставьте API ключ с aisstream.io..." />
+      <button class="btn primary" onclick="connectAIS()">Подключить Live AIS</button>
+      <button class="btn" onclick="disconnectAIS()">Отключить</button>
+    </div>
+    <div class="api-hint">
+      Бесплатный ключ: <a href="https://aisstream.io" target="_blank">aisstream.io</a> → Sign Up → Dashboard → Copy API Key.
+      Без ключа — работает в режиме симуляции с реальными историческими данными.
+    </div>
+  </div>
+
+  <!-- ALERT -->
+  <div id="alert-box"></div>
+
+  <!-- METRICS -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-lbl">Нефть Brent</div>
+      <div class="metric-val c-amber" id="m-brent">$110.24</div>
+      <div class="metric-sub" id="m-brent-ch">▲ +34% с закрытия пролива</div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">Транзиты / 24 ч</div>
+      <div class="metric-val c-red" id="m-transit">12</div>
+      <div class="metric-sub">норма: ~95 судов</div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">Танкеры в зоне</div>
+      <div class="metric-val" id="m-vessels">34</div>
+      <div class="metric-sub">стоят на якоре / ждут</div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">Обновлено</div>
+      <div class="metric-val c-blue" style="font-size:16px" id="m-time">—</div>
+      <div class="metric-sub" id="m-date">05.05.2026</div>
+    </div>
+  </div>
+
+  <!-- THRESHOLD -->
+  <div class="thresh-bar">
+    <label>Порог алерта «пролив открывается»:</label>
+    <input type="range" min="20" max="85" value="60" id="thresh" oninput="onThresh(this.value)">
+    <span id="thresh-lbl">60 судов/день → сигнал фиксировать прибыль</span>
+  </div>
+
+  <!-- MAP + SIDE PANEL -->
+  <div class="main-grid">
+    <div class="map-card">
+      <div class="vtip" id="vtip"></div>
+      <svg viewBox="0 0 500 240" xmlns="http://www.w3.org/2000/svg">
+        <rect width="500" height="240" fill="#071525"/>
+        <!-- sea -->
+        <path d="M0,60 Q70,42 160,52 Q230,60 295,46 Q355,34 400,46 Q428,54 448,68 Q462,78 476,85 Q488,90 500,94 L500,240 L0,240Z" fill="#0d2a4a"/>
+        <!-- Iran coast -->
+        <path d="M0,48 Q68,33 158,44 Q228,54 294,40 Q354,28 400,42 Q428,50 448,64 Q462,74 476,82 Q488,87 500,91" stroke="#1a3a5c" stroke-width="1.2" fill="none"/>
+        <!-- UAE coast -->
+        <path d="M185,240 Q205,212 228,196 Q255,178 285,168 Q315,160 340,163 Q365,167 380,177 Q400,188 420,192 Q445,195 470,190 Q487,186 500,188" stroke="#1a3a5c" stroke-width="1.2" fill="none"/>
+        <!-- Iran land -->
+        <path d="M0,0 L500,0 L500,91 Q488,87 476,82 Q462,74 448,64 Q428,50 402,40 Q358,26 297,38 Q232,52 162,42 Q72,30 0,44Z" fill="#8b7355" opacity="0.83"/>
+        <!-- UAE/Oman land -->
+        <path d="M180,240 L500,240 L500,188 Q487,186 470,190 Q445,195 420,192 Q400,188 380,177 Q365,167 342,163 Q317,160 287,168 Q256,178 229,196 Q206,212 188,238Z" fill="#9b8a6a" opacity="0.83"/>
+        <!-- labels -->
+        <text x="155" y="24" fill="#c4b08a" font-size="11" font-weight="600">ИРАН</text>
+        <text x="265" y="232" fill="#c4b08a" font-size="9">ОАЭ / ОМАН</text>
+        <text x="30" y="200" fill="#c4b08a" font-size="8.5">Саудовская Аравия</text>
+        <text x="80" y="130" fill="#3a7fc1" font-size="9" opacity="0.85">Персидский залив</text>
+        <text x="395" y="140" fill="#3a7fc1" font-size="9" opacity="0.85">Оманский залив</text>
+        <!-- strait label -->
+        <text x="346" y="106" fill="#7fb8e0" font-size="8.5" text-anchor="middle">Ормузский</text>
+        <text x="346" y="117" fill="#7fb8e0" font-size="8.5" text-anchor="middle">пролив</text>
+        <!-- gate line -->
+        <line x1="332" y1="55" x2="348" y2="178" stroke="#E24B4A" stroke-width="1.8" stroke-dasharray="5,3" opacity="0.85"/>
+        <!-- Bandar Abbas -->
+        <circle cx="368" cy="58" r="3" fill="#E24B4A" opacity="0.9"/>
+        <text x="373" y="56" fill="#f0a0a0" font-size="7.5">Бандар-Аббас</text>
+        <!-- Fujairah -->
+        <circle cx="400" cy="174" r="3" fill="#EF9F27" opacity="0.9"/>
+        <text x="404" y="172" fill="#f0d080" font-size="7.5">Фуджейра 🔥</text>
+        <!-- legend -->
+        <rect x="5" y="5" width="132" height="66" fill="rgba(0,0,0,0.58)" rx="4"/>
+        <circle cx="18" cy="18" r="3.5" fill="#E24B4A"/>
+        <text x="27" y="22" fill="#daeaf8" font-size="9">Танкер на якоре</text>
+        <circle cx="18" cy="33" r="3.5" fill="#EF9F27"/>
+        <text x="27" y="37" fill="#daeaf8" font-size="9">Танкер в движении</text>
+        <circle cx="18" cy="48" r="3.5" fill="#639922"/>
+        <text x="27" y="52" fill="#daeaf8" font-size="9">Балластный рейс</text>
+        <line x1="10" y1="63" x2="24" y2="63" stroke="#E24B4A" stroke-width="1.5" stroke-dasharray="4,2"/>
+        <text x="27" y="67" fill="#daeaf8" font-size="9">Линия контроля</text>
+        <g id="gvessels"></g>
+      </svg>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h3>Торговые сигналы</h3>
+        <div class="sig-row"><span class="sig-name">Нефть Brent</span><span class="sig-val up" id="sig-brent">LONG ▲</span></div>
+        <div class="sig-row"><span class="sig-name">Газойль / Керосин</span><span class="sig-val up">LONG ▲</span></div>
+        <div class="sig-row"><span class="sig-name">СПГ (20% рынка)</span><span class="sig-val up">LONG ▲</span></div>
+        <div class="sig-row"><span class="sig-name">Танкерные акции</span><span class="sig-val up">LONG ▲</span></div>
+        <div class="sig-row"><span class="sig-name" id="sig-open-name">Открытие &gt;60 судов</span><span class="sig-val nx" id="sig-open">ЖДЁМ</span></div>
+        <div style="margin-top:10px;padding:7px 9px;background:var(--bg2);border-radius:6px;font-size:11px;color:var(--text2);">
+          Обходные маршруты: ~35% потока.<br>Иран атаковал ОАЭ 4 мая 2026.<br>Brent: пик $114.44 (4 мая).
+        </div>
+      </div>
+      <div class="panel">
+        <h3>AIS лог</h3>
+        <div class="ais-log" id="ais-log">
+          <div class="log-entry warn">🔴 04.05 — Атака дрона у пролива</div>
+          <div class="log-entry warn">🔥 04.05 — Пожар в порту Фуджейра</div>
+          <div class="log-entry new">🟡 05.05 12:34 — MSV ABU MUSA транзит</div>
+          <div class="log-entry">⚓ 34 танкера на якоре в Перс. заливе</div>
+          <div class="log-entry new">🟡 05.05 09:11 — LPG MATRIX GAS выход</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts">
+    <div class="chart-card">
+      <h3>Транзиты через пролив (судов / день)</h3>
+      <div style="position:relative;height:160px">
+        <canvas id="cTransit"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3>Нефть Brent (USD / bbl)</h3>
+      <div style="position:relative;height:160px">
+        <canvas id="cOil"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Данные: <a href="https://aisstream.io" target="_blank">AISstream.io</a> (бесплатный AIS WebSocket) ·
+    <a href="https://hormuztracker.com" target="_blank">HormuzTracker</a> ·
+    <a href="https://windward.ai" target="_blank">Windward AI</a> ·
+    Цена Brent: <a href="https://oilpriceapi.com" target="_blank">oilpriceapi.com</a> /
+    <a href="https://tradingeconomics.com/commodity/brent-crude-oil" target="_blank">Trading Economics</a>
+  </div>
+
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+let wsConn = null;
+let isLive = false;
+let threshold = 60;
+let currentTransits = 12;
+let brentPrice = 110.24;
+let vesselCount = 34;
+let simInterval = null;
+
+// ── VESSELS ON MAP ────────────────────────────────────
+const VESSELS = [
+  {x:110,y:125,t:'anchor',n:'VLCC COSCO STAR',f:'🇨🇳',s:'На якоре 8 дней | Пункт назначения: Нинбо'},
+  {x:148,y:110,t:'anchor',n:'Aframax DELTA',f:'🇬🇷',s:'На якоре 5 дней | DWT: 105 000'},
+  {x:180,y:122,t:'anchor',n:'Suezmax PHOENIX',f:'🇲🇭',s:'На якоре 3 дня | Флаг: Маршалловы о-ва'},
+  {x:210,y:108,t:'anchor',n:'VLCC OCEANIA',f:'🇵🇦',s:'На якоре 11 дней | Груз: ~2M bbl'},
+  {x:82,y:138,t:'anchor',n:'LNG GOLAR BEAR',f:'🇧🇸',s:'На якоре 6 дней | СПГ-танкер'},
+  {x:242,y:116,t:'anchor',n:'Aframax NEPTUNE',f:'🇲🇭',s:'На якоре 2 дня'},
+  {x:58,y:130,t:'anchor',n:'VLCC PACIFIC',f:'🇵🇦',s:'На якоре 14 дней | Критическая ситуация'},
+  {x:163,y:140,t:'anchor',n:'Suezmax AURORA',f:'🇧🇲',s:'На якоре 4 дня | Бермуды'},
+  {x:270,y:106,t:'anchor',n:'VLCC HORIZON',f:'🇨🇳',s:'На якоре 9 дней'},
+  {x:36,y:155,t:'anchor',n:'Suezmax ARIES',f:'🇲🇭',s:'На якоре 3 дня'},
+  {x:125,y:148,t:'anchor',n:'Aframax KRONOS',f:'🇬🇷',s:'На якоре 1 день'},
+  {x:200,y:138,t:'anchor',n:'VLCC EVER GOLD',f:'🇨🇳',s:'На якоре 7 дней'},
+  {x:318,y:78,t:'moving',n:'Cargo MSV ABU MUSA',f:'🇮🇳',s:'Транзит — южный коридор (AIS вкл)'},
+  {x:346,y:100,t:'moving',n:'LPG MATRIX GAS',f:'🇦🇪',s:'Исходящий рейс | CC: Matrix Maritime'},
+  {x:375,y:140,t:'ballast',n:'Aframax SWIFT',f:'🇬🇷',s:'Балластный — пустой | в Оманский залив'},
+  {x:400,y:158,t:'moving',n:'Tanker FORTUNE',f:'🇵🇦',s:'Входящий рейс'},
+];
+const COLORS = {anchor:'#E24B4A', moving:'#EF9F27', ballast:'#639922'};
+
+function buildMap() {
+  const g = document.getElementById('gvessels');
+  const vtip = document.getElementById('vtip');
+  const wrap = document.querySelector('.map-card');
+  VESSELS.forEach(v => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg','g');
+    if (v.t === 'anchor') {
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx',v.x); ring.setAttribute('cy',v.y); ring.setAttribute('r',7);
+      ring.setAttribute('fill','none'); ring.setAttribute('stroke',COLORS.anchor);
+      ring.setAttribute('stroke-width','0.8'); ring.setAttribute('opacity','0.35');
+      el.appendChild(ring);
+    }
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',v.x); c.setAttribute('cy',v.y);
+    c.setAttribute('r', v.t==='anchor'?3.5:4.5);
+    c.setAttribute('fill',COLORS[v.t]); c.setAttribute('opacity','0.93');
+    el.appendChild(c);
+    el.style.cursor = 'pointer';
+    el.addEventListener('mouseenter', e => {
+      vtip.style.display = 'block';
+      vtip.innerHTML = v.f + ' <strong>' + v.n + '</strong><br>' + v.s;
+      const br = wrap.getBoundingClientRect();
+      let lft = e.clientX - br.left + 12;
+      let top = e.clientY - br.top + 12;
+      if (lft + 220 > br.width) lft = e.clientX - br.left - 230;
+      vtip.style.left = lft + 'px';
+      vtip.style.top = top + 'px';
+    });
+    el.addEventListener('mouseleave', () => { vtip.style.display = 'none'; });
+    g.appendChild(el);
+  });
+}
+
+// ── CHARTS ─────────────────────────────────────────────
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+const tc = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+const gc = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+
+const chartLabels = ['01.фев','10.фев','20.фев','28.фев','10.мар','20.мар','01.апр','15.апр','01.май','05.май'];
+const transitData = [95, 94, 91, 10, 9, 11, 13, 10, 11, 12];
+const oilData     = [81.5, 82.0, 82.3, 85.2, 93.5, 94.8, 95.8, 97.2, 109.5, 110.2];
+
+const baseOpts = (yMin, yMax, fmtCb) => ({
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: { callbacks: { label: fmtCb } } },
+  scales: {
+    x: { ticks: { color: tc, font: { size: 9 }, maxRotation: 40, autoSkip: true, maxTicksLimit: 6 }, grid: { color: gc } },
+    y: { ticks: { color: tc, font: { size: 9 } }, grid: { color: gc }, min: yMin, max: yMax }
+  }
+});
+
+const transitChart = new Chart(document.getElementById('cTransit'), {
+  type: 'line',
+  data: { labels: [...chartLabels], datasets: [{ label: 'Транзиты', data: [...transitData],
+    borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.1)',
+    fill: true, tension: 0.35, pointRadius: 2.5, borderWidth: 2 }] },
+  options: baseOpts(0, 105, ctx => ctx.parsed.y + ' судов')
+});
+
+const oilChart = new Chart(document.getElementById('cOil'), {
+  type: 'line',
+  data: { labels: [...chartLabels], datasets: [{ label: 'Brent', data: [...oilData],
+    borderColor: '#BA7517', backgroundColor: 'rgba(186,117,23,0.1)',
+    fill: true, tension: 0.35, pointRadius: 2.5, borderWidth: 2 }] },
+  options: baseOpts(78, 120, ctx => '$' + ctx.parsed.y.toFixed(1))
+});
+
+// ── ALERTS & SIGNALS ──────────────────────────────────
+function checkAlerts() {
+  const box = document.getElementById('alert-box');
+  const t = currentTransits;
+  const b = brentPrice;
+
+  document.getElementById('sig-open-name').textContent = 'Открытие >' + threshold + ' судов';
+
+  if (t >= threshold) {
+    box.innerHTML = `<div class="alert success">
+      <div class="alert-ico">✅</div>
+      <div class="alert-body">
+        <div class="alert-title">Пролив открывается! ${t} судов / день ≥ порога ${threshold}</div>
+        <div class="alert-sub">Нефтяной Long позиции — время фиксировать прибыль</div>
+      </div>
+      <div class="signal-pill">ФИКСИРОВАТЬ ПРИБЫЛЬ</div>
+    </div>`;
+    document.getElementById('sig-open').textContent = 'ВЫХОД ▼';
+    document.getElementById('sig-open').className = 'sig-val dn';
+  } else if (t >= 20 && t < threshold) {
+    box.innerHTML = `<div class="alert warning">
+      <div class="alert-ico">⚠️</div>
+      <div class="alert-body">
+        <div class="alert-title">Частичное открытие: ${t} судов / день (порог ${threshold})</div>
+        <div class="alert-sub">Следить за динамикой — закрытие позиции ещё не актуально</div>
+      </div>
+      <div class="signal-pill">СЛЕДИТЬ</div>
+    </div>`;
+    document.getElementById('sig-open').textContent = 'СЛЕДИМ';
+    document.getElementById('sig-open').className = 'sig-val nx';
+  } else {
+    box.innerHTML = `<div class="alert danger">
+      <div class="alert-ico">🚨</div>
+      <div class="alert-body">
+        <div class="alert-title">Пролив заблокирован: ${t} судов / день — Brent $${b.toFixed(2)}</div>
+        <div class="alert-sub">Закрытие продолжается с 28 февраля 2026 — позиция актуальна</div>
+      </div>
+      <div class="signal-pill">ДЕРЖАТЬ LONG</div>
+    </div>`;
+    document.getElementById('sig-open').textContent = 'ЖДЁМ';
+    document.getElementById('sig-open').className = 'sig-val nx';
+  }
+}
+
+function onThresh(v) {
+  threshold = parseInt(v);
+  document.getElementById('thresh-lbl').textContent = v + ' судов/день → сигнал фиксировать прибыль';
+  checkAlerts();
+}
+
+// ── AIS WEBSOCKET ─────────────────────────────────────
+function connectAIS() {
+  const key = document.getElementById('api-key').value.trim();
+  if (!key) { alert('Введите API ключ с aisstream.io'); return; }
+  disconnectAIS();
+  stopSim();
+
+  setBadge('connecting');
+  document.getElementById('live-label').textContent = 'подключение...';
+
+  try {
+    const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
+    wsConn = ws;
+
+    ws.onopen = () => {
+      // Bounding box: Strait of Hormuz + Persian Gulf approach
+      const sub = {
+        APIKey: key,
+        BoundingBoxes: [[[22.0, 54.0], [27.0, 60.0]]],
+        FilterMessageTypes: ['PositionReport', 'ShipStaticData']
+      };
+      ws.send(JSON.stringify(sub));
+      setBadge('live');
+      document.getElementById('live-label').textContent = 'Live AIS';
+      isLive = true;
+      addLog('✅ Подключено к aisstream.io — зона Ормузского пролива', 'new');
+    };
+
+    let liveVesselCount = 0;
+    let liveTransitCount = 0;
+    const seenMMSI = new Set();
+
+    ws.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        const meta = d.Metadata || {};
+        const name = meta.ShipName || meta.shipname || '';
+        const mmsi = String(meta.MMSI || meta.mmsi || '');
+        const lat = parseFloat(meta.latitude || meta.Latitude || 0);
+        const lon = parseFloat(meta.longitude || meta.Longitude || 0);
+
+        if (mmsi && !seenMMSI.has(mmsi)) {
+          seenMMSI.add(mmsi);
+          liveVesselCount++;
+          document.getElementById('m-vessels').textContent = liveVesselCount;
+        }
+
+        // Count transits through strait gate (lon ~56.2-56.8)
+        if (lon >= 56.1 && lon <= 57.0) {
+          liveTransitCount++;
+          currentTransits = liveTransitCount;
+          document.getElementById('m-transit').textContent = liveTransitCount;
+          const ts = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+          if (name) addLog('🟡 ' + ts + ' — ' + name + ' (' + lat.toFixed(2) + '°N)', 'new');
+        }
+
+        updateTime();
+        checkAlerts();
+      } catch(_) {}
+    };
+
+    ws.onerror = () => {
+      setBadge('error');
+      document.getElementById('live-label').textContent = 'ошибка';
+      addLog('❌ Ошибка подключения — проверьте API ключ', 'warn');
+      isLive = false;
+      startSim();
+    };
+
+    ws.onclose = () => {
+      if (isLive) {
+        setBadge('sim');
+        document.getElementById('live-label').textContent = 'симуляция';
+        addLog('⚠️ Соединение закрыто', 'warn');
+      }
+      isLive = false;
+    };
+
+  } catch(err) {
+    setBadge('error');
+    addLog('❌ WebSocket не поддерживается', 'warn');
+    startSim();
+  }
+}
+
+function disconnectAIS() {
+  if (wsConn) { wsConn.close(); wsConn = null; }
+  isLive = false;
+  setBadge('sim');
+  document.getElementById('live-label').textContent = 'симуляция';
+  startSim();
+}
+
+// ── SIMULATION ────────────────────────────────────────
+function startSim() {
+  if (simInterval) return;
+  simInterval = setInterval(simTick, 30000);
+}
+
+function stopSim() {
+  if (simInterval) { clearInterval(simInterval); simInterval = null; }
+}
+
+function simTick() {
+  if (isLive) return;
+  // Simulate slight brent fluctuation around current real price
+  brentPrice = 110.24 + (Math.random() - 0.5) * 1.5;
+  document.getElementById('m-brent').textContent = '$' + brentPrice.toFixed(2);
+  const pct = ((brentPrice / 82.3 - 1) * 100).toFixed(1);
+  document.getElementById('m-brent-ch').textContent = '▲ +' + pct + '% с закрытия пролива';
+
+  currentTransits = Math.floor(8 + Math.random() * 8);
+  document.getElementById('m-transit').textContent = currentTransits;
+
+  vesselCount = Math.floor(30 + Math.random() * 8);
+  document.getElementById('m-vessels').textContent = vesselCount;
+
+  // Add simulated log entry occasionally
+  const ships = ['VLCC ATLAS','Aframax TIGRIS','LNG ARCTIC STAR','Suezmax ZEUS'];
+  const actions = ['обнаружен на якоре','изменил курс','отключил AIS','возобновил трансляцию'];
+  if (Math.random() > 0.5) {
+    const s = ships[Math.floor(Math.random()*ships.length)];
+    const a = actions[Math.floor(Math.random()*actions.length)];
+    addLog('📡 ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + ' — ' + s + ' ' + a);
+  }
+
+  updateTime();
+  checkAlerts();
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function setBadge(state) {
+  const b = document.getElementById('conn-badge');
+  if (state === 'live') { b.className = 'status-badge badge-live'; b.textContent = 'Live AIS'; }
+  else if (state === 'error') { b.className = 'status-badge badge-err'; b.textContent = 'Ошибка'; }
+  else if (state === 'connecting') { b.className = 'status-badge badge-sim'; b.textContent = 'Подключение...'; }
+  else { b.className = 'status-badge badge-sim'; b.textContent = 'Симуляция'; }
+}
+
+function addLog(msg, cls) {
+  const log = document.getElementById('ais-log');
+  const d = document.createElement('div');
+  d.className = 'log-entry' + (cls ? ' ' + cls : '');
+  d.textContent = msg;
+  log.insertBefore(d, log.firstChild);
+  while (log.children.length > 15) log.removeChild(log.lastChild);
+}
+
+function updateTime() {
+  const now = new Date();
+  document.getElementById('m-time').textContent = now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('m-date').textContent = now.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
+
+// ── INIT ──────────────────────────────────────────────
+buildMap();
+updateTime();
+checkAlerts();
+startSim();
+</script>
+</body>
+</html>
